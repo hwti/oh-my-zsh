@@ -1,7 +1,11 @@
 # get the name of the branch we are on
 function git_prompt_info() {
   ref=$(git symbolic-ref HEAD 2> /dev/null) || return
-  echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
+  if [[ $GIT_BIGREPO == true ]]; then
+    echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$ZSH_THEME_GIT_PROMPT_SUFFIX"
+  else
+    echo "$ZSH_THEME_GIT_PROMPT_PREFIX${ref#refs/heads/}$(parse_git_dirty)$ZSH_THEME_GIT_PROMPT_SUFFIX"
+  fi
 }
 
 # Checks if working tree is dirty
@@ -32,6 +36,8 @@ function git_prompt_long_sha() {
 
 # Get the status of the working tree
 git_prompt_status() {
+  [[ $GIT_BIGREPO == true ]] && return
+
   INDEX=$(git status --porcelain 2> /dev/null)
   STATUS=""
   if $(echo "$INDEX" | grep '^?? ' &> /dev/null); then
@@ -59,4 +65,30 @@ git_prompt_status() {
     STATUS="$ZSH_THEME_GIT_PROMPT_UNMERGED$STATUS"
   fi
   echo $STATUS
+}
+
+#this code must run after compinit
+function git_completion_wrapper_setup() {
+  #run completion file, to define __git_files function
+  _git
+
+  #"rename" __git_files to __old_git_files
+  functions[__old_git_files]=$functions[__git_files]
+
+  #new __git_files function
+  function __git_files() {
+    if [[ $GIT_BIGREPO == true ]]; then
+      local expl files
+      _wanted files expl 'local files' _files
+    else
+      __old_git_files $*
+    fi
+  }
+}
+
+#check if initial cwd is in a big git repository
+GIT_BIGREPO=$(git config ohmyzsh.bigrepo)
+#check again each time cwd is changed
+add-zsh-hook chpwd () {
+  GIT_BIGREPO=$(git config ohmyzsh.bigrepo)
 }
